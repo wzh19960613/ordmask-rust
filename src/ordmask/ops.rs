@@ -1,5 +1,4 @@
 use super::OrdMask;
-use crate::MinValue;
 
 macro_rules! impl_bitor {
     ($lt:ty, $rt:ty) => {
@@ -8,7 +7,8 @@ macro_rules! impl_bitor {
 
             /// Create a new OrdMask representing the union of the `self` and `rhs`.
             ///
-            /// Values included in the union must be included in at least one of the `self` or `rhs`.
+            /// Values included in the union must be included in
+            /// at least one of the `self` or `rhs`.
             fn bitor(self, rhs: $rt) -> Self::Output {
                 OrdMask::union(&[&self, &rhs])
             }
@@ -48,7 +48,8 @@ macro_rules! impl_bitxor {
 
             /// Create a new OrdMask representing the symmetric difference of the `self` and `rhs`.
             ///
-            /// Values included in the symmetric difference must be included in one of the `self` or `rhs`, but not both.
+            /// Values included in the symmetric difference must be included in
+            /// one of the `self` or `rhs`, but not both.
             fn bitxor(self, rhs: $rt) -> Self::Output {
                 self.symmetric_difference(&rhs)
             }
@@ -70,7 +71,7 @@ macro_rules! impl_sub {
             ///
             /// Values included in the difference must be included in `self` and excluded in `rhs`.
             fn sub(self, rhs: $rt) -> Self::Output {
-                self.difference(&[&rhs])
+                self.minus(&[&rhs])
             }
         }
     };
@@ -81,20 +82,24 @@ impl_sub!(OrdMask<T>, &OrdMask<T>);
 impl_sub!(&OrdMask<T>, OrdMask<T>);
 impl_sub!(&OrdMask<T>, &OrdMask<T>);
 
-macro_rules! impl_not {
-    ($lt:ty) => {
-        impl<T: Ord + Clone + MinValue> std::ops::Not for $lt {
-            type Output = OrdMask<T>;
+impl<T: Ord + Clone> std::ops::Not for OrdMask<T> {
+    type Output = OrdMask<T>;
 
-            /// Create a new OrdMask representing the complement of the `self`.
-            ///
-            /// Values included in the complement must be excluded in `self`.
-            fn not(self) -> Self::Output {
-                self.complement()
-            }
-        }
-    };
+    /// Create a new OrdMask representing the complement of the `self`.
+    ///
+    /// Values included in the complement must be excluded in `self`.
+    fn not(self) -> Self::Output {
+        self.complement()
+    }
 }
 
-impl_not!(OrdMask<T>);
-impl_not!(&OrdMask<T>);
+impl<T: Ord + Clone> std::ops::Not for &OrdMask<T> {
+    type Output = OrdMask<T>;
+
+    /// Create a new OrdMask representing the complement of the `self`.
+    ///
+    /// Values included in the complement must be excluded in `self`.
+    fn not(self) -> Self::Output {
+        self.new_complement()
+    }
+}

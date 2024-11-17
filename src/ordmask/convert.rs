@@ -1,6 +1,6 @@
 use super::OrdMask;
 
-pub fn get_first_falling_index<T: Ord>(vec: &Vec<T>) -> usize {
+pub fn get_first_falling_index<T: PartialOrd>(vec: &Vec<T>) -> usize {
     for i in 1..vec.len() {
         if vec[i] < vec[i - 1] {
             return i;
@@ -25,41 +25,53 @@ impl std::fmt::Debug for Error {
     }
 }
 
+impl<T: Ord + Clone> From<OrdMask<T>> for Vec<T> {
+    fn from(mask: OrdMask<T>) -> Self {
+        mask.key_points
+    }
+}
+
 impl<T: Ord + Clone> TryFrom<Vec<T>> for OrdMask<T> {
     type Error = Error;
 
-    /// Convert a `Vec<T>` to an simplified `OrdMask<T>`.
-    ///
-    /// # Errors
-    ///
-    /// It will return an error if `vec` is not non-decreasing.
-    fn try_from(vec: Vec<T>) -> Result<Self, Self::Error> {
-        match get_first_falling_index(&vec) {
+    fn try_from(key_points: Vec<T>) -> Result<Self, Self::Error> {
+        Self::try_new(key_points, false)
+    }
+}
+
+impl<T: Ord + Clone> OrdMask<T> {
+    fn try_new(key_points: Vec<T>, reversed: bool) -> Result<Self, Error> {
+        match get_first_falling_index(&key_points) {
             0 => {
-                let mut result = Self(vec);
+                let mut result = Self {
+                    key_points,
+                    reversed,
+                };
                 result.simplify();
                 Ok(result)
             }
             n => Err(Error { falling_pos: n }),
         }
     }
-}
 
-impl<T: Ord + Clone> From<OrdMask<T>> for Vec<T> {
-    fn from(mask: OrdMask<T>) -> Self {
-        mask.0
-    }
-}
-
-impl<T: Ord + Clone> OrdMask<T> {
     /// Create an `OrdMask` from a `Vec<T>`.
     ///
     /// # Panics
     ///
     /// It will panic if `vec` is not non-decreasing.
     /// Or you can use `try_from` to handle the error.
-    pub fn from(vec: Vec<T>) -> Self {
-        Self::try_from(vec).unwrap()
+    pub fn from(key_points: Vec<T>) -> Self {
+        Self::try_new(key_points, false).unwrap()
+    }
+
+    /// Create an `OrdMask` from a `Vec<T>` that is the complement of the original mask.
+    ///
+    /// # Panics
+    ///
+    /// It will panic if `vec` is not non-decreasing.
+    /// Or you can use `try_from` to handle the error.
+    pub fn from_complement(key_points: Vec<T>) -> Self {
+        Self::try_new(key_points, true).unwrap()
     }
 
     /// Create an `OrdMask` from a `Vec<T>`.
@@ -67,7 +79,10 @@ impl<T: Ord + Clone> OrdMask<T> {
     /// # Safety
     ///
     /// The `vec` must be non-decreasing, otherwise the behavior is undefined.
-    pub unsafe fn with_unchecked(vec: Vec<T>) -> Self {
-        Self(vec)
+    pub unsafe fn with_unchecked(key_points: Vec<T>, reversed: bool) -> Self {
+        Self {
+            key_points,
+            reversed,
+        }
     }
 }
