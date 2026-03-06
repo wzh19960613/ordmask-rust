@@ -5,7 +5,7 @@ edition = "2024"
 authors = ["Wzh <wzh@uvwee.com>"]
 description = "A library for efficient range-based set operations and membership checking"
 license = "MIT"
-keywords = ["mask", "ordered", "range", "interval", "set", "membership"]
+keywords = ["mask", "ordered", "range", "interval", "set"]
 repository = "https://github.com/wzh19960613/ordmask-rust"
 
 [dependencies]
