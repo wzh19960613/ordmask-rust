@@ -1,14 +1,20 @@
+use std::collections::BTreeSet;
+
 mod construct;
 mod convert;
 mod operations;
-mod ops;
 
-/// An `OrdMask` can be used to check if a value is included.
+use super::WithMin;
+
+/// A mask for efficiently checking if a value is included.
 ///
-/// It is a list of values in ascending order and a pair in two-element tuples means a included range.
+/// An `OrdMask` stores key points in ascending order. Consecutive key points define
+/// alternating included/excluded intervals.
 ///
-/// For example, the mask `[0, 2, 4]` means that `[0, 2)` and `[4, \infty)` are included,  
-/// and the values in `(-\infty, 0)` and `[2, 4)` are excluded.
+/// For example, `ordmask![0, 2, 4]` includes `[0, 2)` and `[4, MAX)`,
+/// and excludes `(MIN, 0)` and `[2, 4)`.
+///
+/// Use [crate::ordmask!] to create an `OrdMask`.
 ///
 /// # Examples
 /// ```
@@ -41,125 +47,178 @@ mod ops;
 /// (10..20).for_each(|x| should_exclude(&mask, x));
 /// (20..30).for_each(|x| should_include(&mask, x));
 ///
-/// let mask = ordmask![_, 0, 10, 20];
+/// let mask = ordmask![.., 0, 10, 20];
 /// (-10..0).for_each(|x| should_include(&mask, x));
 /// (0..10).for_each(|x| should_exclude(&mask, x));
 /// (10..20).for_each(|x| should_include(&mask, x));
 /// (20..30).for_each(|x| should_exclude(&mask, x));
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OrdMask<T: Ord + Clone> {
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct OrdMask<T: Ord + Clone + WithMin> {
     key_points: Vec<T>,
-    reversed: bool,
+    based_on_universal: bool,
 }
 
-impl<T: Ord + Clone> OrdMask<T> {
+impl<T: Ord + Clone + WithMin> AsRef<OrdMask<T>> for OrdMask<T> {
+    fn as_ref(&self) -> &OrdMask<T> {
+        self
+    }
+}
+
+impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// Check if the `OrdMask` is empty.
     ///
     /// An empty `OrdMask` means no value is included.
     pub fn is_empty(&self) -> bool {
-        !self.reversed && self.key_points.is_empty()
+        !self.based_on_universal && self.key_points.is_empty()
     }
 
-    /// Check if the mask is universal.
-    ///
-    /// An universal mask includes all values.
+    /// Check if the mask is universal (includes all values).
     pub fn is_universal(&self) -> bool {
-        self.key_points.is_empty() && self.reversed
+        self.based_on_universal && self.key_points.is_empty()
     }
 
     /// Check if the `OrdMask` is valid.
     ///
-    /// There is no need to test `is_valid()` if you never use unsafe methods.
+    /// Unnecessary if you never use unsafe methods.
     pub fn is_valid(&self) -> bool {
-        convert::get_first_falling_index(&self.key_points) == 0
+        crate::utils::is_increasing::<true, _>(&self.key_points).0
     }
 
-    /// Check if a value is included in this mask.
+    /// Returns whether this mask is based on a universal mask (`true`) or an empty mask (`false`).
+    ///
+    /// `ordmask![1]` and `ordmask![.., 1]` have the same key points, but:
+    /// - `ordmask![1]` starts from empty, includes `[1, MAX)`
+    /// - `ordmask![.., 1]` starts from universal, includes `(MIN, 1)`
+    pub const fn based_on_universal(&self) -> &bool {
+        &self.based_on_universal
+    }
+
+    /// Mutable reference to [`OrdMask::based_on_universal`].
+    ///
+    /// Changing this has the same effect as calling [`OrdMask::reverse`].
+    ///
+    /// For most cases, you should use [`OrdMask::reverse`] instead.
+    pub const fn mut_based_on_universal(&mut self) -> &mut bool {
+        &mut self.based_on_universal
+    }
+
+    /// Check if a value is included in this mask. Equivalent to [`OrdMask::contains`].
     pub fn included(&self, value: &T) -> bool {
-        self.reversed ^ (self.key_points.partition_point(|x| x <= value) % 2 == 1)
+        let partition_point = self.key_points.partition_point(|x| x <= value);
+        self.based_on_universal == partition_point.is_multiple_of(2)
     }
 
-    /// Check if a value is excluded in this mask.
+    /// Check if a value is excluded in this mask. Equivalent to negating [`OrdMask::included`].
     pub fn excluded(&self, value: &T) -> bool {
         !self.included(value)
     }
 
-    /// Check if the `OrdMask` includes the maximum value.
-    pub fn is_include_max_value(&self) -> bool {
-        self.reversed ^ (self.key_points.len() % 2 == 1)
+    /// Check if a value is contained in this mask. Equivalent to [`OrdMask::included`].
+    pub fn contains(&self, value: &T) -> bool {
+        self.included(value)
     }
 
-    /// Check if the `OrdMask` includes the minimum value.
-    pub fn is_include_min_value(&self) -> bool {
-        self.reversed
+    /// Check if the maximum value is included.
+    ///
+    /// ```
+    /// use ordmask::ordmask;
+    ///
+    /// assert!(ordmask![1].is_max_value_included());
+    /// assert!(ordmask![<i32> ..].is_max_value_included());
+    /// assert!(ordmask![.., 1, 2].is_max_value_included());
+    /// assert!(!ordmask![1, 2].is_max_value_included());
+    /// ```
+    pub fn is_max_value_included(&self) -> bool {
+        self.based_on_universal == self.key_points.len().is_multiple_of(2)
     }
 
-    /// Check if the `OrdMask` is simplified.
+    /// Simplify the mask by removing redundant key points.
     ///
-    /// An simplified `OrdMask` means there are no duplicate values.
+    /// Unnecessary if you never use unsafe constructors, as safe methods
+    /// ensure the mask is always simplified.
     ///
-    /// There is no need to test `is_simplified()` if you never use unsafe methods,  
-    /// otherwise you should directly use `simplify()` without checking `is_simplified()`.
-    pub fn is_simplified(&self) -> bool {
-        for i in 1..self.key_points.len() {
-            if self.key_points[i] == self.key_points[i - 1] {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Remove meaningless values in the `OrdMask`.
-    ///
-    /// The safe methods will ensure the `OrdMask` is simplified automatically.  
-    /// Therefore, there is no need to call it unless you are using unsafe methods.
+    /// Returns `true` if the mask was modified.
     ///
     /// # Examples
     /// ```
     /// use ordmask::{OrdMask, ordmask};
     ///
-    /// let mut mask = ordmask![0, 0, 1, 1];
+    /// let mut mask = unsafe { OrdMask::with_checked(vec![0, 0], false) };
+    /// mask.simplify();
     /// assert_eq!(mask, ordmask![]);
     ///
-    /// let mut mask = ordmask![0, 2, 2, 2, 3, 3, 4];
-    /// assert_eq!(mask, ordmask![0, 2, 4]);
-    ///
-    /// let mut mask = unsafe { OrdMask::with_unchecked(vec![0, 2, 2, 2, 4, 4, 4, 6, 6, 8, 8], false) };
+    /// let mut mask = unsafe { OrdMask::<u32>::with_checked(vec![0], true) };
     /// mask.simplify();
-    /// assert_eq!(mask, ordmask![0, 2, 4]);
+    /// assert_eq!(mask, ordmask![]);
     /// ```
-    pub fn simplify(&mut self) {
-        let len = self.key_points.len();
-        if len < 2 {
-            return;
-        }
-
+    pub fn simplify(&mut self) -> bool {
+        let len = match self.key_points.len() {
+            0 => return false,
+            n => n,
+        };
         let mut write_index = 0;
         let mut read_index = 0;
-        while read_index < len {
-            let start = read_index;
-            while read_index < len && self.key_points[read_index] == self.key_points[start] {
-                read_index += 1;
+
+        #[inline(always)]
+        fn move_to_next_value<T: PartialEq>(idx: &mut usize, arr: &[T], len: usize, now_value: &T) {
+            while *idx < len && &arr[*idx] == now_value {
+                *idx += 1;
             }
-            if (read_index - start) % 2 == 1 {
-                self.key_points[write_index] = self.key_points[start].clone();
+        }
+
+        move_to_next_value(&mut read_index, &self.key_points, len, &T::MIN);
+        if read_index != 0 && !read_index.is_multiple_of(2) {
+            self.based_on_universal = !self.based_on_universal;
+        }
+
+        while read_index < len {
+            let (start_index, now_value) = (read_index, self.key_points[read_index].clone());
+            read_index += 1;
+            move_to_next_value(&mut read_index, &self.key_points, len, &now_value);
+            if !(read_index - start_index).is_multiple_of(2) {
+                self.key_points[write_index] = now_value;
                 write_index += 1;
             }
         }
-
         self.key_points.truncate(write_index);
+        write_index < len
     }
 
+    /// Reference to the key points of this mask.
     pub fn key_points(&self) -> &Vec<T> {
         &self.key_points
     }
 
-    /// Get the key points of `masks`.
-    pub fn get_key_points_set(masks: &[&OrdMask<T>]) -> std::collections::BTreeSet<T> {
-        let mut result = std::collections::BTreeSet::new();
+    /// Mutable reference to the key points of this mask.
+    ///
+    /// # Safety
+    ///
+    /// Must ensure that the key_points are unique and strictly increasing after modification.
+    pub const unsafe fn mut_key_points(&mut self) -> &mut Vec<T> {
+        &mut self.key_points
+    }
+
+    /// Get suspicious points from multiple masks.
+    ///
+    /// Includes all key points, plus `T::MIN` if any mask has [`OrdMask::based_on_universal`] = `true`.
+    pub fn get_suspicious_points<I>(masks: I) -> BTreeSet<T>
+    where
+        I: IntoIterator,
+        I::Item: AsRef<OrdMask<T>>,
+    {
+        let mut result = BTreeSet::new();
+        let mut has_universal = false;
         for item in masks {
-            result.extend(item.key_points.iter().cloned());
+            let item = item.as_ref();
+            result.extend(item.key_points.clone());
+            if item.based_on_universal {
+                has_universal = true;
+            }
+        }
+        if has_universal {
+            result.insert(T::MIN);
         }
         result
     }

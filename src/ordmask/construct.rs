@@ -1,16 +1,18 @@
-use super::OrdMask;
+use std::collections::{BTreeMap, BTreeSet};
 
-impl<T: Ord + Clone> OrdMask<T> {
+use crate::{OrdMask, WithMin};
+
+impl<T: Ord + Clone + WithMin> OrdMask<T> {
     fn new(key_points: Vec<T>, reversed: bool) -> Self {
         Self {
             key_points,
-            reversed,
+            based_on_universal: reversed,
         }
     }
 
-    /// Create an empty OrdMask which includes no values.
+    /// Create an empty [`OrdMask`] (includes no values).
     ///
-    /// It's the same as `ordmask![]`.
+    /// Equivalent to `ordmask![]`. See [`crate::ordmask!`].
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
@@ -21,22 +23,22 @@ impl<T: Ord + Clone> OrdMask<T> {
         Self::new(Vec::new(), false)
     }
 
-    /// Create a new universal OrdMask which includes all values.
+    /// Create a universal [`OrdMask`] (includes all values).
     ///
-    /// It's the same as `ordmask![_]`.
+    /// Equivalent to `ordmask![..]`. See [`crate::ordmask!`].
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
-    /// let mask: OrdMask<u64> = ordmask![_];
+    /// let mask: OrdMask<u64> = ordmask![..];
     /// assert_eq!(mask, OrdMask::universal());
     /// ```
     pub fn universal() -> Self {
         Self::new(Vec::new(), true)
     }
 
-    /// Create a new OrdMask that includes all values greater than or equal to `value`.
+    /// Create an [`OrdMask`] that includes all values `≥ value`.
     ///
-    /// It's the same as `ordmask![_, value]`.
+    /// Equivalent to `ordmask![value]`. See [`crate::ordmask!`].
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
@@ -46,21 +48,21 @@ impl<T: Ord + Clone> OrdMask<T> {
         Self::new(vec![value], false)
     }
 
-    /// Create a new OrdMask that includes all values less than `value`.
+    /// Create an [`OrdMask`] that includes all values `< value`.
     ///
-    /// It's the same as `ordmask![_, value]`.
+    /// Equivalent to `ordmask![.., value]`. See [`crate::ordmask!`].
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
-    /// assert_eq!(ordmask![_, 1], OrdMask::less_than(1));
+    /// assert_eq!(ordmask![.., 1], OrdMask::less_than(1));
     /// ```
     pub fn less_than(value: T) -> Self {
         Self::new(vec![value], true)
     }
 
-    /// Create a new OrdMask that includes all values in the range `[start, end)`.
+    /// Create an [`OrdMask`] that includes values in `[start, end)`.
     ///
-    /// It's the same as `ordmask![start, end]`.
+    /// Equivalent to `ordmask![start, end]`. See [`crate::ordmask!`].
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
@@ -73,13 +75,13 @@ impl<T: Ord + Clone> OrdMask<T> {
         }
     }
 
-    /// Create a new OrdMask that excludes all values in the range `[start, end)`.
+    /// Create an [`OrdMask`] that excludes values in `[start, end)`.
     ///
-    /// It's the same as `ordmask![_, start, end]`.
+    /// Equivalent to `ordmask![.., start, end]`. See [`crate::ordmask!`].
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
-    /// assert_eq!(ordmask![_, 1, 10], OrdMask::exclude_range(1, 10));
+    /// assert_eq!(ordmask![.., 1, 10], OrdMask::exclude_range(1, 10));
     /// ```
     pub fn exclude_range(start: T, end: T) -> Self {
         match start < end {
@@ -88,147 +90,229 @@ impl<T: Ord + Clone> OrdMask<T> {
         }
     }
 
-    /// Create a new OrdMask from a set of key points and a predicate.
+    /// Create an [`OrdMask`] from suspicious points and an inclusion predicate.
     ///
-    /// The `key_points` are the values where the mask changes its state.
+    /// - `suspicious_points`: values where the mask may change state
+    /// - `is_included`: a function that returns `true`
+    ///   if a suspicious point is included in the mask, `false` otherwise
+    /// - `based_on_universal`: if `true`, the mask starts from universal; otherwise from empty
     ///
-    /// The `is_included` is used to test if a key point is included or excluded in the mask.
+    /// # Example
     ///
-    /// If you need a mask include all values less than some value,
-    /// the `include_min_value` must be `true`.
-    /// Otherwise, the `include_min_value` must be `false`.
-    ///
-    /// For example, a mask like this:
+    /// For a mask including `[1, 4)`:
     ///
     /// | ✕ | ✕ | ✓ | ✓ | ✓ | ✕ | ✕ |
     /// |---|---|---|---|---|---|---|
     /// |...| 0 | 1 | 2 | 3 | 4 |...|
     ///
-    /// must contain key points `1` and `4`,
-    /// and `is_included(1)` must be `true` and `is_included(4)` must be `false`,
-    /// and the `include_min_value` must be `false`.
+    /// Can be constructed by starting from empty and
+    /// switching to included at 1, then to excluded at 4. Therefore:
+    /// - `suspicious_points` must include at least 1 and 4
+    /// - `is_included(suspicious_point)` must return `true` if `suspicious_point` is in `[1, 4)`,
+    ///   and `false` otherwise
+    /// - `based_on_universal` should be `false`.
     ///
-    /// A mask like this:
+    /// For a mask including `(MIN, 2)`:
     ///
     /// | ✓ | ✓ | ✓ | ✕ | ✕ | ✕ | ✕ |
     /// |---|---|---|---|---|---|---|
     /// |...| 0 | 1 | 2 | 3 | 4 |...|
     ///
-    /// must contain key points `2`,
-    /// and `is_included(2)` must be `false`,
-    /// and the `include_min_value` must be `true`.
-    pub fn from_key_points_set(
-        key_points: std::collections::BTreeSet<T>,
+    /// Can be constructed by starting from universal and switching to excluded at 2. Therefore:
+    /// - `suspicious_points` must include at least 2
+    /// - `is_included(suspicious_point)` must return `true` if `suspicious_point` is in `(MIN, 2)`,
+    ///   and `false` otherwise
+    /// - `based_on_universal` should be `true`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::collections::BTreeSet;
+    /// use ordmask::{OrdMask, ordmask};
+    ///
+    /// let set = BTreeSet::from([1, 4]); // can include more values
+    /// let mask = OrdMask::from_suspicious_points_set(set, |v| matches!(v, 1..4), false);
+    /// assert_eq!(mask, ordmask![1, 4]);
+    /// ```
+    pub fn from_suspicious_points_set(
+        suspicious_points: BTreeSet<T>,
         is_included: impl Fn(&T) -> bool,
-        include_min_value: bool,
+        based_on_universal: bool,
     ) -> Self {
-        let mut mask = Vec::with_capacity(key_points.len());
-        for point in key_points {
-            if (is_included(&point) == (mask.len() % 2 == 0)) ^ include_min_value {
-                mask.push(point);
-            }
-        }
-        mask.shrink_to_fit();
-        Self::new(mask, include_min_value)
+        unsafe { Self::from_suspicious_points(suspicious_points, is_included, based_on_universal) }
     }
 
-    /// Create a new OrdMask from a key points to boolean map.
+    /// Create an [`OrdMask`] from suspicious points and an inclusion predicate.
     ///
-    /// The `map` is a map of key points to the boolean value indicates
-    /// whether the key point is included in the mask.
+    /// - `suspicious_points`: values where the mask may change state (must be strictly increasing)
+    /// - `is_included`: a function that returns `true`
+    ///   if a suspicious point is included in the mask, `false` otherwise
+    /// - `based_on_universal`: if `true`, the mask starts from universal; otherwise from empty
     ///
-    /// If you need a mask include all values less than some value,
-    /// the `include_min_value` must be `true`.
-    /// Otherwise, the `include_min_value` must be `false`.
+    /// See the safe version [`OrdMask::from_suspicious_points_set`].
     ///
-    /// For example, a mask like this:
+    /// # Example
+    ///
+    /// For a mask including `[1, 4)`:
     ///
     /// | ✕ | ✕ | ✓ | ✓ | ✓ | ✕ | ✕ |
     /// |---|---|---|---|---|---|---|
     /// |...| 0 | 1 | 2 | 3 | 4 |...|
     ///
-    /// the key points map must include `(1, true)` and `(4, false)`,
-    /// and the `include_min_value` must be `false`.
+    /// Can be constructed by starting from empty and
+    /// switching to included at 1, then to excluded at 4. Therefore:
+    /// - `suspicious_points` must include at least 1 and 4
+    /// - `is_included(suspicious_point)` must return `true` if `suspicious_point` is in `[1, 4)`,
+    ///   and `false` otherwise
+    /// - `based_on_universal` should be `false`.
     ///
-    /// A mask like this:
+    /// For a mask including `(MIN, 2)`:
     ///
     /// | ✓ | ✓ | ✓ | ✕ | ✕ | ✕ | ✕ |
     /// |---|---|---|---|---|---|---|
     /// |...| 0 | 1 | 2 | 3 | 4 |...|
     ///
-    /// the key points map must include `(2, false)`,
-    /// and the `include_min_value` must be `true`.
-    pub fn from_key_points_map(
-        map: std::collections::BTreeMap<T, bool>,
-        include_min_value: bool,
+    /// Can be constructed by starting from universal and switching to excluded at 2. Therefore:
+    /// - `suspicious_points` must include at least 2
+    /// - `is_included(suspicious_point)` must return `true` if `suspicious_point` is in `(MIN, 2)`,
+    ///   and `false` otherwise
+    /// - `based_on_universal` should be `true`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ordmask::{OrdMask, ordmask};
+    ///
+    /// let points = [1, 4]; // can include more values, must be strictly increasing
+    /// let mask = unsafe { OrdMask::from_suspicious_points(points, |v| matches!(v, 1..4), false) };
+    /// assert_eq!(mask, ordmask![1, 4]);
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// `suspicious_points` must be strictly increasing with no duplicates.
+    pub unsafe fn from_suspicious_points(
+        suspicious_points: impl IntoIterator<Item = T>,
+        is_included: impl Fn(&T) -> bool,
+        based_on_universal: bool,
     ) -> Self {
-        let mut mask = Vec::with_capacity(map.len());
-        for (point, is_included) in map {
-            if (is_included == (mask.len() % 2 == 0)) ^ include_min_value {
-                mask.push(point);
+        let pairs = suspicious_points.into_iter().map(|v| {
+            let is_included = is_included(&v);
+            (v, is_included)
+        });
+        unsafe { Self::from_suspicious_points_pairs(pairs, based_on_universal, None) }
+    }
+
+    /// Construct an [`OrdMask`] from a map of suspicious points to inclusion states.
+    ///
+    /// - Key: the point where state may change
+    /// - Value: `true` if included at that point, `false` if excluded
+    /// - `based_on_universal`: if `true`, the mask starts from universal; otherwise from empty
+    ///
+    /// # Example
+    ///
+    /// For a mask including `[1, 4)`:
+    ///
+    /// | ✕ | ✕ | ✓ | ✓ | ✓ | ✕ | ✕ |
+    /// |---|---|---|---|---|---|---|
+    /// |...| 0 | 1 | 2 | 3 | 4 |...|
+    ///
+    /// Can be constructed by starting from empty and
+    /// switching to included at 1, then to excluded at 4. Therefore:
+    /// - `map` must include `(1, true)` and `(4, false)`
+    /// - `based_on_universal` should be `false`.
+    ///
+    /// For a mask including `(MIN, 2)`:
+    ///
+    /// | ✓ | ✓ | ✓ | ✕ | ✕ | ✕ | ✕ |
+    /// |---|---|---|---|---|---|---|
+    /// |...| 0 | 1 | 2 | 3 | 4 |...|
+    ///
+    /// Can be constructed by starting from universal and switching to excluded at 2. Therefore:
+    /// - `map` must include `(2, false)`
+    /// - `based_on_universal` should be `true`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::collections::BTreeMap;
+    /// use ordmask::{OrdMask, ordmask};
+    ///
+    /// let map = BTreeMap::from([(1, true), (4, false)]);
+    /// let mask = OrdMask::from_suspicious_points_map(map, false);
+    /// assert_eq!(mask, ordmask![1, 4]);
+    /// ```
+    pub fn from_suspicious_points_map(map: BTreeMap<T, bool>, based_on_universal: bool) -> Self {
+        unsafe { Self::from_suspicious_points_pairs(map, based_on_universal, None) }
+    }
+
+    /// Construct an [`OrdMask`] from key-value pairs of suspicious points and inclusion states.
+    ///
+    /// - Key: the point where state may change (must be strictly increasing)
+    /// - Value: `true` if included at that point, `false` if excluded
+    /// - `based_on_universal`: if `true`, the mask starts from universal; otherwise from empty
+    /// - `size_hint`: if provided, pre-allocates that capacity
+    ///
+    /// See the safe version [`OrdMask::from_suspicious_points_map`].
+    ///
+    /// # Example
+    ///
+    /// For a mask including `[1, 4)`:
+    ///
+    /// | ✕ | ✕ | ✓ | ✓ | ✓ | ✕ | ✕ |
+    /// |---|---|---|---|---|---|---|
+    /// |...| 0 | 1 | 2 | 3 | 4 |...|
+    ///
+    /// Can be constructed by starting from empty and
+    /// switching to included at 1, then to excluded at 4. Therefore:
+    /// - `pairs` must include `(1, true)` and `(4, false)`
+    /// - `based_on_universal` should be `false`.
+    ///
+    /// For a mask including `(MIN, 2)`:
+    ///
+    /// | ✓ | ✓ | ✓ | ✕ | ✕ | ✕ | ✕ |
+    /// |---|---|---|---|---|---|---|
+    /// |...| 0 | 1 | 2 | 3 | 4 |...|
+    ///
+    /// Can be constructed by starting from universal and switching to excluded at 2. Therefore:
+    /// - `pairs` must include `(2, false)`
+    /// - `based_on_universal` should be `true`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ordmask::{OrdMask, ordmask};
+    ///
+    /// let pairs = [(1, true), (4, false)];
+    /// let mask = unsafe { OrdMask::from_suspicious_points_pairs(pairs, false, None) };
+    /// assert_eq!(mask, ordmask![1, 4]);
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// Keys must be strictly increasing with no duplicates.
+    pub unsafe fn from_suspicious_points_pairs(
+        pairs: impl IntoIterator<Item = (T, bool)>,
+        reversed: bool,
+        size_hint: Option<usize>,
+    ) -> Self {
+        let mut iter = pairs.into_iter();
+        let mut mask = Vec::with_capacity(size_hint.unwrap_or_else(|| iter.size_hint().0));
+        let mut reversed = reversed;
+        if let Some((first_point, first_is_included)) = iter.next() {
+            if reversed != first_is_included {
+                match T::MIN == first_point {
+                    true => reversed = !reversed,
+                    false => mask.push(first_point.clone()),
+                }
+            }
+            for (point, is_included) in iter {
+                if (is_included == mask.len().is_multiple_of(2)) != reversed {
+                    mask.push(point.clone());
+                }
             }
         }
         mask.shrink_to_fit();
-        Self::new(mask, include_min_value)
+        Self::new(mask, reversed)
     }
-}
-
-/// Create an `OrdMask` from a list of key points.
-///
-/// # Panics
-///
-/// It will panic if the key points are not non-decreasing.
-///
-/// # Examples
-///
-/// ```
-/// use ordmask::{OrdMask, ordmask};
-///
-/// let mask: OrdMask<i32> = ordmask![];
-/// assert_eq!(mask, OrdMask::empty());
-///
-/// let mask: OrdMask<u64> = ordmask![_];
-/// assert_eq!(mask, OrdMask::universal());
-///
-/// let mask = ordmask![0, 10, 20];
-/// assert_eq!(mask, OrdMask::from(vec![0, 10, 20]));
-///
-/// let mask = ordmask![_, 0, 10, 20];
-/// assert_eq!(mask, OrdMask::from_complement(vec![0, 10, 20]));
-/// ```
-#[macro_export]
-macro_rules! ordmask {
-    () => {
-        ordmask::OrdMask::empty()
-    };
-    ($($key_points:expr),+ $(,)?) => {
-        ordmask::OrdMask::from(vec![$($key_points),+])
-    };
-    (_, $($key_points:expr),+ $(,)?) => {
-        ordmask::OrdMask::from_complement(vec![$($key_points),+])
-    };
-    (_) => {
-        ordmask::OrdMask::universal()
-    };
-}
-
-/// Create an `OrdMask` from a list of key points without checking if the key points are non-decreasing.
-///
-/// # Safety
-///
-/// Make sure the key points are non-decreasing, otherwise the behavior is undefined.
-#[macro_export]
-macro_rules! ordmask_uncheck {
-    () => {
-        ordmask::OrdMask::empty()
-    };
-    ($($key_points:expr),+ $(,)?) => {
-        ordmask::OrdMask::with_unchecked(vec![$($key_points),+], false)
-    };
-    (_, $($key_points:expr),+ $(,)?) => {
-        ordmask::OrdMask::with_unchecked(vec![$($key_points),+], true)
-    };
-    (_) => {
-        ordmask::OrdMask::universal()
-    };
 }

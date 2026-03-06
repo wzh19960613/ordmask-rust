@@ -1,9 +1,9 @@
-use super::OrdMask;
+use super::{OrdMask, WithMin};
 
-impl<T: Ord + Clone> OrdMask<T> {
-    /// Create a new OrdMask representing the union of the `masks`.
+impl<T: Ord + Clone + WithMin> OrdMask<T> {
+    /// Create a new [`OrdMask`] representing the union of `masks`.
     ///
-    /// Values included in the union must be included in at least one of the `masks`.
+    /// A value is included in the result if it's included in at least one mask.
     ///
     /// # Examples
     ///
@@ -16,17 +16,22 @@ impl<T: Ord + Clone> OrdMask<T> {
     /// let union = OrdMask::union(&[&mask1, &mask2, &mask3]);
     /// assert_eq!(union, ordmask![0, 10, 20, 30]);
     /// ```
-    pub fn union(masks: &[&OrdMask<T>]) -> Self {
-        Self::from_key_points_set(
-            Self::get_key_points_set(masks),
-            |x| masks.iter().any(|item| item.included(x)),
-            masks.iter().any(|item| item.reversed),
+    pub fn union(masks: &[impl AsRef<OrdMask<T>>]) -> Self {
+        Self::from_suspicious_points_set(
+            Self::get_suspicious_points(masks),
+            |x| masks.iter().any(|item| item.as_ref().included(x)),
+            masks.iter().any(|item| item.as_ref().based_on_universal),
         )
     }
 
-    /// Create a new OrdMask representing the intersection of the `masks`.
+    /// See [`OrdMask::union`].
+    pub fn union_from_iter(masks: impl IntoIterator<Item = impl AsRef<OrdMask<T>>>) -> Self {
+        Self::union(masks.into_iter().collect::<Vec<_>>().as_slice())
+    }
+
+    /// Create a new [`OrdMask`] representing the intersection of `masks`.
     ///
-    /// Values included in the intersection must be included in all of the `masks`.
+    /// A value is included in the result if it's included in all masks.
     ///
     /// # Examples
     ///
@@ -39,18 +44,23 @@ impl<T: Ord + Clone> OrdMask<T> {
     /// let intersection = OrdMask::intersection(&[&mask1, &mask2, &mask3]);
     /// assert_eq!(intersection, ordmask![5, 6]);
     /// ```
-    pub fn intersection(masks: &[&OrdMask<T>]) -> Self {
-        Self::from_key_points_set(
-            Self::get_key_points_set(masks),
-            |x| masks.iter().all(|item| item.included(x)),
-            masks.iter().all(|item| item.reversed),
+    pub fn intersection(masks: &[impl AsRef<OrdMask<T>>]) -> Self {
+        Self::from_suspicious_points_set(
+            Self::get_suspicious_points(masks),
+            |x| masks.iter().all(|item| item.as_ref().included(x)),
+            masks.iter().all(|item| item.as_ref().based_on_universal),
         )
     }
 
-    /// Create a new OrdMask representing the difference of the `self` and `others`.
+    /// See [`OrdMask::intersection`].
+    pub fn intersection_from_iter(masks: impl IntoIterator<Item = impl AsRef<OrdMask<T>>>) -> Self {
+        Self::intersection(masks.into_iter().collect::<Vec<_>>().as_slice())
+    }
+
+    /// Create a new [`OrdMask`] representing `self` minus `others`.
     ///
-    /// Values included in the difference must be included in `self`
-    /// and excluded in all of the `others`.
+    /// A value is included in the result if it's included in `self`
+    /// and excluded in all of `others`.
     ///
     /// # Examples
     ///
@@ -60,21 +70,28 @@ impl<T: Ord + Clone> OrdMask<T> {
     /// let mask1 = ordmask![0, 30];
     /// let mask2 = ordmask![5, 10];
     /// let mask3 = ordmask![6, 20];
-    /// let complement = mask1.minus(&[&mask2, &mask3]);
-    /// assert_eq!(complement, ordmask![0, 5, 20, 30]);
+    /// let difference = mask1.minus(&[&mask2, &mask3]);
+    /// assert_eq!(difference, ordmask![0, 5, 20, 30]);
     /// ```
-    pub fn minus(&self, others: &[&OrdMask<T>]) -> Self {
-        Self::from_key_points_set(
-            Self::get_key_points_set(&[&[self], others].concat()),
-            |x| self.included(x) && others.iter().all(|item| item.excluded(x)),
-            self.reversed && !others.iter().any(|item| item.reversed),
+    pub fn minus(&self, others: &[impl AsRef<OrdMask<T>>]) -> Self {
+        Self::from_suspicious_points_set(
+            Self::get_suspicious_points(others.iter().map(|item| item.as_ref()).chain([self])),
+            |x| self.included(x) && others.iter().all(|item| item.as_ref().excluded(x)),
+            self.based_on_universal && !others.iter().any(|item| item.as_ref().based_on_universal),
         )
     }
 
-    /// Create a new OrdMask representing the symmetric difference of the `self` and `other`.
+    /// See [`OrdMask::minus`].
+    pub fn minus_from_iter(
+        &self,
+        others: impl IntoIterator<Item = impl AsRef<OrdMask<T>>>,
+    ) -> Self {
+        Self::minus(self, others.into_iter().collect::<Vec<_>>().as_slice())
+    }
+
+    /// Create a new [`OrdMask`] representing the symmetric difference of `self` and `other`.
     ///
-    /// Values included in the symmetric difference
-    /// must be included in one of the `self` or `other`, but not both.
+    /// A value is included in the result if it's included in exactly one of `self` or `other`.
     ///
     /// # Examples
     ///
@@ -85,17 +102,38 @@ impl<T: Ord + Clone> OrdMask<T> {
     /// let mask2 = ordmask![5, 20];
     /// let symmetric_difference = mask1.symmetric_difference(&mask2);
     /// assert_eq!(symmetric_difference, ordmask![0, 5, 10, 20]);
-    pub fn symmetric_difference(&self, other: &Self) -> Self {
-        Self::from_key_points_set(
-            Self::get_key_points_set(&[self, other]),
-            |x| self.included(x) != other.included(x),
-            self.reversed ^ other.reversed,
+    /// ```
+    pub fn symmetric_difference(&self, other: impl AsRef<Self>) -> Self {
+        Self::from_suspicious_points_set(
+            Self::get_suspicious_points([self, other.as_ref()]),
+            |x| self.included(x) != other.as_ref().included(x),
+            self.based_on_universal != other.as_ref().based_on_universal,
         )
     }
 
-    /// Consume the `self` and return a new OrdMask that represents the complement of the `self`.
+    /// Consume `self` and return its complement.
     ///
-    /// Values included in the complement must be excluded in the `self`, and vice versa.
+    /// A value is included in the result iff it's excluded in `self`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ordmask::ordmask;
+    ///
+    /// let mask = ordmask![0, 10];
+    /// let complement = mask.to_complement();
+    /// assert_eq!(complement, ordmask![.., 0, 10]);
+    /// ```
+    pub fn to_complement(self) -> Self {
+        Self {
+            key_points: self.key_points,
+            based_on_universal: !self.based_on_universal,
+        }
+    }
+
+    /// Create a new [`OrdMask`] representing the complement of `self`.
+    ///
+    /// A value is included in the result iff it's excluded in `self`.
     ///
     /// # Examples
     ///
@@ -104,38 +142,18 @@ impl<T: Ord + Clone> OrdMask<T> {
     ///
     /// let mask = ordmask![0, 10];
     /// let complement = mask.complement();
-    /// assert_eq!(complement, ordmask![_, 0, 10]);
+    /// assert_eq!(complement, ordmask![.., 0, 10]);
     /// ```
-    pub fn complement(self) -> Self {
-        Self {
-            key_points: self.key_points,
-            reversed: !self.reversed,
-        }
-    }
-
-    /// Create a new OrdMask that represents the complement of the `self`.
-    ///
-    /// Values included in the complement must be excluded in the `self`, and vice versa.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ordmask::ordmask;
-    ///
-    /// let mask = ordmask![0, 10];
-    /// let complement = mask.new_complement();
-    /// assert_eq!(complement, ordmask![_, 0, 10]);
-    /// ```
-    pub fn new_complement(&self) -> Self {
+    pub fn complement(&self) -> Self {
         Self {
             key_points: self.key_points.clone(),
-            reversed: !self.reversed,
+            based_on_universal: !self.based_on_universal,
         }
     }
 
-    /// Convert the `self` to its complement.
+    /// Convert `self` to its complement in place.
     ///
-    /// Values included in the complement must be excluded in the `self`, and vice versa.
+    /// A value is included after reversal iff it was excluded before.
     ///
     /// # Examples
     ///
@@ -144,11 +162,11 @@ impl<T: Ord + Clone> OrdMask<T> {
     ///
     /// let mut mask = ordmask![0, 10];
     /// mask.reverse();
-    /// assert_eq!(mask, ordmask![_, 0, 10]);
+    /// assert_eq!(mask, ordmask![.., 0, 10]);
     /// mask.reverse();
     /// assert_eq!(mask, ordmask![0, 10]);
     /// ```
     pub fn reverse(&mut self) {
-        self.reversed = !self.reversed;
+        self.based_on_universal = !self.based_on_universal;
     }
 }

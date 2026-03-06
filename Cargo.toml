@@ -1,11 +1,20 @@
 [package]
 name = "ordmask"
-version = "1.0.0"
-edition = "2021"
+version = "2.0.0"
+edition = "2024"
 authors = ["Wzh <wzh@uvwee.com>"]
-description = "To check if a value is included efficiently."
+description = "A library for efficient range-based set operations and membership checking"
 license = "MIT"
-keywords = ["mask", "ordered", "range"]
+keywords = ["mask", "ordered", "range", "interval", "set", "membership"]
 repository = "https://github.com/wzh19960613/ordmask-rust"
 
 [dependencies]
+thiserror = "2"
+serde = { version = "1", optional = true, features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+default = []
+serde = ["dep:serde"]
