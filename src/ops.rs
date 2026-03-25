@@ -34,7 +34,7 @@ impl_op! { BitOr
     ///
     /// Equivalent to `OrdMask::union(&[self.as_ref(), rhs.as_ref()])`.
     ///
-    /// Use [`OrdMask::union`] when there are more than two masks to combine.
+    /// Use [`OrdMask::union(...)`](OrdMask::union) when there are more than two masks to combine.
     fn bitor(self, rhs) { OrdMask::union(&[self.as_ref(), rhs.as_ref()]) }
 }
 
@@ -43,16 +43,14 @@ impl_op! { BitAnd
     ///
     /// Equivalent to `OrdMask::intersection(&[self.as_ref(), rhs.as_ref()])`.
     ///
-    /// Use [`OrdMask::intersection`] when there are more than two masks to combine.
+    /// Use [`OrdMask::intersection(...)`](OrdMask::intersection) when there are more than two masks to combine.
     fn bitand(self, rhs) { OrdMask::intersection(&[self.as_ref(), rhs.as_ref()]) }
 }
 
 impl_op! { BitXor
     /// Create a new [`OrdMask`] representing the symmetric difference of `self` and `rhs`.
     ///
-    /// Equivalent to `self.symmetric_difference(rhs.as_ref())`.
-    ///
-    /// See [`OrdMask::symmetric_difference`].
+    /// Equivalent to [`self.symmetric_difference(rhs.as_ref())`](OrdMask::symmetric_difference)
     fn bitxor(self, rhs) { self.symmetric_difference(rhs.as_ref()) }
 }
 
@@ -61,7 +59,7 @@ impl_op! { Sub
     ///
     /// Equivalent to `self.minus(&[rhs.as_ref()])`
     ///
-    /// Use [`OrdMask::minus`] when there are more than one mask to remove.
+    /// Use [`a.minus(...)`](OrdMask::minus) when there are more than one mask to remove.
     fn sub(self, rhs) { self.minus(&[rhs.as_ref()]) }
 }
 
@@ -81,7 +79,7 @@ impl<T: Ord + Clone + WithMin> std::ops::Not for &OrdMask<T> {
 
     /// Create a new [`OrdMask`] representing the complement of `self`.
     ///
-    /// Equivalent to `self.complement()`. See [`OrdMask::complement`].
+    /// Equivalent to [`self.complement()`](OrdMask::complement).
     fn not(self) -> Self::Output {
         self.complement()
     }

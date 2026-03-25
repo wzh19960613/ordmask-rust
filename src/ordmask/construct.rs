@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{OrdMask, WithMin};
 
 impl<T: Ord + Clone + WithMin> OrdMask<T> {
-    fn new(key_points: Vec<T>, reversed: bool) -> Self {
+    const fn new(key_points: Vec<T>, reversed: bool) -> Self {
         Self {
             key_points,
             based_on_universal: reversed,
@@ -12,33 +12,33 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
 
     /// Create an empty [`OrdMask`] (includes no values).
     ///
-    /// Equivalent to `ordmask![]`. See [`crate::ordmask!`].
+    /// Equivalent to [`ordmask![]`](crate::ordmask!).
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
     /// let mask: OrdMask<i32> = ordmask![];
     /// assert_eq!(mask, OrdMask::empty());
     /// ```
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self::new(Vec::new(), false)
     }
 
     /// Create a universal [`OrdMask`] (includes all values).
     ///
-    /// Equivalent to `ordmask![..]`. See [`crate::ordmask!`].
+    /// Equivalent to [`ordmask![..]`](crate::ordmask!).
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
     /// let mask: OrdMask<u64> = ordmask![..];
     /// assert_eq!(mask, OrdMask::universal());
     /// ```
-    pub fn universal() -> Self {
+    pub const fn universal() -> Self {
         Self::new(Vec::new(), true)
     }
 
     /// Create an [`OrdMask`] that includes all values `≥ value`.
     ///
-    /// Equivalent to `ordmask![value]`. See [`crate::ordmask!`].
+    /// Equivalent to [`ordmask![value]`](crate::ordmask!).
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
@@ -50,7 +50,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
 
     /// Create an [`OrdMask`] that includes all values `< value`.
     ///
-    /// Equivalent to `ordmask![.., value]`. See [`crate::ordmask!`].
+    /// Equivalent to [`ordmask![.., value]`](crate::ordmask!).
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
@@ -62,7 +62,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
 
     /// Create an [`OrdMask`] that includes values in `[start, end)`.
     ///
-    /// Equivalent to `ordmask![start, end]`. See [`crate::ordmask!`].
+    /// Equivalent to [`ordmask![start, end]`](crate::ordmask!).
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
@@ -77,7 +77,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
 
     /// Create an [`OrdMask`] that excludes values in `[start, end)`.
     ///
-    /// Equivalent to `ordmask![.., start, end]`. See [`crate::ordmask!`].
+    /// Equivalent to [`ordmask![.., start, end]`](crate::ordmask!).
     ///
     /// ```
     /// use ordmask::{OrdMask, ordmask};
@@ -112,7 +112,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     ///   and `false` otherwise
     /// - `based_on_universal` should be `false`.
     ///
-    /// For a mask including `(MIN, 2)`:
+    /// For a mask including `[MIN, 2)`:
     ///
     /// | ✓ | ✓ | ✓ | ✕ | ✕ | ✕ | ✕ |
     /// |---|---|---|---|---|---|---|
@@ -120,7 +120,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     ///
     /// Can be constructed by starting from universal and switching to excluded at 2. Therefore:
     /// - `suspicious_points` must include at least 2
-    /// - `is_included(suspicious_point)` must return `true` if `suspicious_point` is in `(MIN, 2)`,
+    /// - `is_included(suspicious_point)` must return `true` if `suspicious_point` is in `[MIN, 2)`,
     ///   and `false` otherwise
     /// - `based_on_universal` should be `true`.
     ///
@@ -149,7 +149,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     ///   if a suspicious point is included in the mask, `false` otherwise
     /// - `based_on_universal`: if `true`, the mask starts from universal; otherwise from empty
     ///
-    /// See the safe version [`OrdMask::from_suspicious_points_set`].
+    /// See the safe version [`from_suspicious_points_set`](OrdMask::from_suspicious_points_set).
     ///
     /// # Example
     ///
@@ -166,7 +166,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     ///   and `false` otherwise
     /// - `based_on_universal` should be `false`.
     ///
-    /// For a mask including `(MIN, 2)`:
+    /// For a mask including `[MIN, 2)`:
     ///
     /// | ✓ | ✓ | ✓ | ✕ | ✕ | ✕ | ✕ |
     /// |---|---|---|---|---|---|---|
@@ -174,7 +174,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     ///
     /// Can be constructed by starting from universal and switching to excluded at 2. Therefore:
     /// - `suspicious_points` must include at least 2
-    /// - `is_included(suspicious_point)` must return `true` if `suspicious_point` is in `(MIN, 2)`,
+    /// - `is_included(suspicious_point)` must return `true` if `suspicious_point` is in `[MIN, 2)`,
     ///   and `false` otherwise
     /// - `based_on_universal` should be `true`.
     ///
@@ -222,7 +222,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// - `map` must include `(1, true)` and `(4, false)`
     /// - `based_on_universal` should be `false`.
     ///
-    /// For a mask including `(MIN, 2)`:
+    /// For a mask including `[MIN, 2)`:
     ///
     /// | ✓ | ✓ | ✓ | ✕ | ✕ | ✕ | ✕ |
     /// |---|---|---|---|---|---|---|
@@ -253,7 +253,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// - `based_on_universal`: if `true`, the mask starts from universal; otherwise from empty
     /// - `size_hint`: if provided, pre-allocates that capacity
     ///
-    /// See the safe version [`OrdMask::from_suspicious_points_map`].
+    /// See the safe version [`from_suspicious_points_map`](OrdMask::from_suspicious_points_map).
     ///
     /// # Example
     ///
@@ -268,7 +268,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// - `pairs` must include `(1, true)` and `(4, false)`
     /// - `based_on_universal` should be `false`.
     ///
-    /// For a mask including `(MIN, 2)`:
+    /// For a mask including `[MIN, 2)`:
     ///
     /// | ✓ | ✓ | ✓ | ✕ | ✕ | ✕ | ✕ |
     /// |---|---|---|---|---|---|---|
@@ -303,12 +303,12 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
             if reversed != first_is_included {
                 match T::MIN == first_point {
                     true => reversed = !reversed,
-                    false => mask.push(first_point.clone()),
+                    false => mask.push(first_point),
                 }
             }
             for (point, is_included) in iter {
                 if (is_included == mask.len().is_multiple_of(2)) != reversed {
-                    mask.push(point.clone());
+                    mask.push(point);
                 }
             }
         }

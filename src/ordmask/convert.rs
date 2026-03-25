@@ -11,7 +11,7 @@ impl<T: Ord + Clone + WithMin> TryFrom<Vec<T>> for OrdMask<T> {
 
     /// Create an [`OrdMask`] from empty with `key_points`.
     ///
-    /// Equivalent to `OrdMask::try_new(..., false)`. See [`OrdMask::try_new`].
+    /// Equivalent to [`OrdMask::try_new(..., false)`](OrdMask::try_new).
     fn try_from(key_points: Vec<T>) -> Result<Self, Self::Error> {
         Self::try_new(key_points, false)
     }
@@ -23,7 +23,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// - `key_points`: values where the mask actually changes state (must be non-decreasing)
     /// - `based_on_universal`: if `true`, the mask starts from universal; otherwise from empty
     ///
-    /// Unlike [`OrdMask::from_suspicious_points_set`], `key_points` should contain only the
+    /// Unlike [`from_suspicious_points_set`](OrdMask::from_suspicious_points_set), `key_points` should contain only the
     /// exact points where state transitions occur, not merely potential transition points.
     ///
     /// # Example
@@ -64,7 +64,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
 
     /// Create an [`OrdMask`] from empty with `key_points`.
     ///
-    /// Equivalent to `OrdMask::try_new(..., false).unwrap()`. See [`OrdMask::try_new`].
+    /// Equivalent to [`OrdMask::try_new(..., false).unwrap()`](OrdMask::try_new).
     ///
     /// # Panics
     ///
@@ -76,7 +76,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
 
     /// Create an [`OrdMask`] from universal with `key_points`.
     ///
-    /// Equivalent to `OrdMask::try_new(..., true).unwrap()`. See [`OrdMask::try_new`].
+    /// Equivalent to [`OrdMask::try_new(..., true).unwrap()`](OrdMask::try_new).
     ///
     /// # Panics
     ///
@@ -87,7 +87,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
 
     /// Create an [`OrdMask`] with key points without validation.
     ///
-    /// See safe version [`OrdMask::try_new`].
+    /// See safe version [`try_new`](OrdMask::try_new).
     ///
     /// # Safety
     ///

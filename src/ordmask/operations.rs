@@ -5,6 +5,9 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     ///
     /// A value is included in the result if it's included in at least one mask.
     ///
+    /// `OrdMask::union(&[&a, &b, &c])` has the same result as `&a | &b | &c`,
+    /// but this function is more efficient when operating on more than two masks.
+    ///
     /// # Examples
     ///
     /// ```
@@ -32,6 +35,9 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// Create a new [`OrdMask`] representing the intersection of `masks`.
     ///
     /// A value is included in the result if it's included in all masks.
+    ///
+    /// `OrdMask::intersection(&[&a, &b, &c])` has the same result as `&a & &b & &c`,
+    /// but this function is more efficient when operating on more than two masks.
     ///
     /// # Examples
     ///
@@ -62,6 +68,9 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// A value is included in the result if it's included in `self`
     /// and excluded in all of `others`.
     ///
+    /// `a.minus(&[&b, &c])` has the same result as `&a - &b - &c`,
+    /// but this function is more efficient when operating on more than one mask in `others`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -81,7 +90,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
         )
     }
 
-    /// See [`OrdMask::minus`].
+    /// See [`minus`](OrdMask::minus).
     pub fn minus_from_iter(
         &self,
         others: impl IntoIterator<Item = impl AsRef<OrdMask<T>>>,
@@ -92,6 +101,8 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// Create a new [`OrdMask`] representing the symmetric difference of `self` and `other`.
     ///
     /// A value is included in the result if it's included in exactly one of `self` or `other`.
+    ///
+    /// `a.symmetric_difference(&b)` has the same result as `&a ^ &b`.
     ///
     /// # Examples
     ///
@@ -115,6 +126,11 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     ///
     /// A value is included in the result iff it's excluded in `self`.
     ///
+    /// `mask.to_complement()` has the same result as `!mask`.
+    ///
+    /// For a non-consuming version, use [`.complement()`](OrdMask::complement).
+    /// For an in-place version, use [`.reverse()`](OrdMask::reverse).
+    ///
     /// # Examples
     ///
     /// ```
@@ -135,6 +151,11 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     ///
     /// A value is included in the result iff it's excluded in `self`.
     ///
+    /// `mask.complement()` has the same result as `!&mask`.
+    ///
+    /// For a consuming version, use [`.to_complement()`](OrdMask::to_complement).
+    /// For an in-place version, use [`.reverse()`](OrdMask::reverse).
+    ///
     /// # Examples
     ///
     /// ```
@@ -154,6 +175,9 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// Convert `self` to its complement in place.
     ///
     /// A value is included after reversal iff it was excluded before.
+    ///
+    /// For a non-consuming version, use [`.complement()`](OrdMask::complement).
+    /// For a consuming version, use [`.to_complement()`](OrdMask::to_complement).
     ///
     /// # Examples
     ///

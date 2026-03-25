@@ -1,9 +1,9 @@
 /// A trait for types that have a minimum value.
 ///
+/// This trait must be implemented for `T` in [`OrdMask<T>`](crate::OrdMask).
+///
 /// The library provides implementations for all standard integer types:
 /// `u8`, `u16`, `u32`, `u64`, `u128`, `usize`, `i8`, `i16`, `i32`, `i64`, `i128`, `isize`.
-///
-/// This trait must be implemented for `T` in `OrdMask<T>`.
 ///
 /// # Example
 ///

@@ -94,18 +94,16 @@ fn test_complement_at_edge() {
     let a: OrdMask<u32> = ordmask![.., 0]; // empty
     let b = ordmask![u32::MAX]; // max only
     let c = ordmask![0, 10]; // from min
-    let d = ordmask![100, u32::MAX]; // to max - 1
+    let d = ordmask![100, u32::MAX]; // [100, u32::MAX)
 
     // Complement of a (empty) is universal
     assert_eq!(a.complement(), ordmask![..]);
-
-    // Complement of b (max only) = [0, u32::MAX)
     assert_eq!(b.complement(), ordmask![.., u32::MAX]);
 
     // Complement of c [0,10) = (-∞, 0) ∪ [10, ∞) represented as reversed
     assert_eq!(c.complement(), ordmask![.., 0, 10]);
 
-    // Complement of d [100, u32::MAX) = [0, 100) ∪ [u32::MAX, ∞) represented as reversed
+    // Complement of d [100, u32::MAX) = [0, 100) ∪ {u32::MAX} represented as reversed
     assert_eq!(d.complement(), ordmask![.., 100, u32::MAX]);
 }
 

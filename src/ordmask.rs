@@ -4,6 +4,9 @@ mod construct;
 mod convert;
 mod operations;
 
+pub mod spans;
+pub use spans::SumSize;
+
 use super::WithMin;
 
 /// A mask for efficiently checking if a value is included.
@@ -11,10 +14,10 @@ use super::WithMin;
 /// An `OrdMask` stores key points in ascending order. Consecutive key points define
 /// alternating included/excluded intervals.
 ///
-/// For example, `ordmask![0, 2, 4]` includes `[0, 2)` and `[4, MAX)`,
-/// and excludes `(MIN, 0)` and `[2, 4)`.
+/// For example, `ordmask![0, 2, 4]` includes `[0, 2)` and `[4, MAX]`,
+/// and excludes `[MIN, 0)` and `[2, 4)`.
 ///
-/// Use [crate::ordmask!] to create an `OrdMask`.
+/// Use [`ordmask!`](crate::ordmask!) to create an `OrdMask`.
 ///
 /// # Examples
 /// ```
@@ -70,12 +73,12 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// Check if the `OrdMask` is empty.
     ///
     /// An empty `OrdMask` means no value is included.
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         !self.based_on_universal && self.key_points.is_empty()
     }
 
     /// Check if the mask is universal (includes all values).
-    pub fn is_universal(&self) -> bool {
+    pub const fn is_universal(&self) -> bool {
         self.based_on_universal && self.key_points.is_empty()
     }
 
@@ -89,33 +92,35 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// Returns whether this mask is based on a universal mask (`true`) or an empty mask (`false`).
     ///
     /// `ordmask![1]` and `ordmask![.., 1]` have the same key points, but:
-    /// - `ordmask![1]` starts from empty, includes `[1, MAX)`
-    /// - `ordmask![.., 1]` starts from universal, includes `(MIN, 1)`
+    /// - `ordmask![1]` starts from empty, includes `[1, MAX]`
+    /// - `ordmask![.., 1]` starts from universal, includes `[MIN, 1)`
     pub const fn based_on_universal(&self) -> &bool {
         &self.based_on_universal
     }
 
-    /// Mutable reference to [`OrdMask::based_on_universal`].
+    /// Mutable reference to [`based_on_universal`](OrdMask::based_on_universal).
     ///
-    /// Changing this has the same effect as calling [`OrdMask::reverse`].
-    ///
-    /// For most cases, you should use [`OrdMask::reverse`] instead.
+    /// Changing this has the same effect as calling [`.reverse()`](OrdMask::reverse).
+    /// For most cases, you should use [`.reverse()`](OrdMask::reverse) instead.
     pub const fn mut_based_on_universal(&mut self) -> &mut bool {
         &mut self.based_on_universal
     }
 
-    /// Check if a value is included in this mask. Equivalent to [`OrdMask::contains`].
+    /// Check if a value is included in this mask.
+    /// Equivalent to [`.contains(...)`](OrdMask::contains).
     pub fn included(&self, value: &T) -> bool {
         let partition_point = self.key_points.partition_point(|x| x <= value);
         self.based_on_universal == partition_point.is_multiple_of(2)
     }
 
-    /// Check if a value is excluded in this mask. Equivalent to negating [`OrdMask::included`].
+    /// Check if a value is excluded in this mask.
+    /// Equivalent to **negating** [`.included(...)`](OrdMask::included).
     pub fn excluded(&self, value: &T) -> bool {
         !self.included(value)
     }
 
-    /// Check if a value is contained in this mask. Equivalent to [`OrdMask::included`].
+    /// Check if a value is contained in this mask.
+    /// Equivalent to [`.included(...)`](OrdMask::included).
     pub fn contains(&self, value: &T) -> bool {
         self.included(value)
     }
@@ -130,7 +135,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// assert!(ordmask![.., 1, 2].is_max_value_included());
     /// assert!(!ordmask![1, 2].is_max_value_included());
     /// ```
-    pub fn is_max_value_included(&self) -> bool {
+    pub const fn is_max_value_included(&self) -> bool {
         self.based_on_universal == self.key_points.len().is_multiple_of(2)
     }
 
@@ -187,7 +192,7 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     }
 
     /// Reference to the key points of this mask.
-    pub fn key_points(&self) -> &Vec<T> {
+    pub const fn key_points(&self) -> &Vec<T> {
         &self.key_points
     }
 
@@ -202,7 +207,8 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
 
     /// Get suspicious points from multiple masks.
     ///
-    /// Includes all key points, plus `T::MIN` if any mask has [`OrdMask::based_on_universal`] = `true`.
+    /// Includes all key points, plus `T::MIN`
+    /// if any mask has [`.based_on_universal()`](OrdMask::based_on_universal) = `true`.
     pub fn get_suspicious_points<I>(masks: I) -> BTreeSet<T>
     where
         I: IntoIterator,

@@ -1,4 +1,4 @@
-/// Create an [OrdMask](`crate::OrdMask`) from key points.
+/// Create an [`OrdMask`](crate::OrdMask) from key points.
 ///
 /// # Panics
 ///
@@ -40,10 +40,10 @@ macro_rules! ordmask {
     };
 }
 
-/// Create an [OrdMask](`crate::OrdMask`) from key points without validation.
+/// Create an [`OrdMask`](crate::OrdMask) from key points without validation.
 ///
 /// Usage is similar to [`ordmask!`], but
-/// without the non-decreasing check and [OrdMask::simplify](`crate::OrdMask::simplify`).
+/// without the non-decreasing check and [`OrdMask::simplify`](crate::OrdMask::simplify).
 ///
 /// # Safety
 ///

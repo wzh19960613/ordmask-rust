@@ -1,3 +1,5 @@
+//! Utility functions
+
 /// Check if a slice is strictly increasing or non-decreasing.
 ///
 /// - `STRICTLY = true`: check for strictly increasing (no duplicates allowed)
