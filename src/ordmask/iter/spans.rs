@@ -1,32 +1,8 @@
-//! Module for efficiently iterating over the included spans of an [`OrdMask`].
+//! Span iterators for [`OrdMask`].
 
 use std::ops::AddAssign;
 
-use super::OrdMask;
-use crate::{Countable, OrderedSub, WithMax, WithMin};
-
-impl<T: Ord + Clone + WithMin> OrdMask<T> {
-    /// Returns the number of included spans.
-    ///
-    /// Unlike [`.spans().count()`](Iterator::count) from the standard library,
-    /// this method is **O(1)** and does not consume or iterate over the spans.
-    ///
-    /// See also [`.spans()`](OrdMask::spans).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ordmask::ordmask;
-    /// assert_eq!(ordmask![.., 10].spans_count(), 1);        // [MIN, 10)
-    /// assert_eq!(ordmask![.., 10, 20].spans_count(), 2);    // [MIN, 10), [20, MAX]
-    /// assert_eq!(ordmask![<u32>].spans_count(), 0);         // Empty
-    /// assert_eq!(ordmask![<u32>..].spans_count(), 1);       // [MIN, MAX]
-    /// ```
-    pub const fn spans_count(&self) -> usize {
-        let delta = if self.based_on_universal { 2 } else { 1 };
-        (delta + self.key_points.len()) / 2
-    }
-}
+use crate::{OrdMask, WithMax, WithMin};
 
 /// An iterator over the included spans of an [`OrdMask`].
 ///
@@ -121,64 +97,16 @@ impl<T: Ord + Clone + WithMin + WithMax> Iterator for IntoIter<T> {
     }
 }
 
-/// Trait for getting the sum size of all included spans for [`OrdMask`].
-pub trait SumSize<T, COUNT>
-where
-    T: Ord + Clone + WithMin + WithMax + OrderedSub<Target = COUNT>,
-    COUNT: Countable,
-{
-    /// Returns the sum of the included spans.
-    ///
-    /// Can be used as [`.spans().sum_size()`](OrdMask::spans)
-    /// or [`.into_spans().sum_size()`](OrdMask::into_spans)
-    ///
-    /// # Panics
-    ///
-    /// May panic due to overflow when called on a universal mask
-    /// (because `MAX - MIN + 1` overflows). Use [`.is_universal()`](OrdMask::is_universal)
-    /// to check before calling this method.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ordmask::{ordmask, spans::SumSize};
-    /// // [0, 10)
-    /// assert_eq!(ordmask![<u32> .., 10].spans().sum_size(), 10);
-    /// // [0, 10), [20, MAX]
-    /// assert_eq!(ordmask![<u32> .., 10, 20].spans().sum_size(), u32::MAX - 10 + 1);
-    /// // Empty mask has size 0
-    /// assert_eq!(ordmask![<u32>].spans().sum_size(), 0);
-    /// // Should panic: u32::MAX + 1 is out of range
-    /// // ordmask![<u32> ..].spans().sum_size();
-    /// ```
-    fn sum_size(&self) -> COUNT;
-}
-
-/// For [`Iter`] and [`IntoIter`].
-impl<T, R, COUNT> SumSize<T, COUNT> for R
-where
-    T: Ord + Clone + WithMin + WithMax + OrderedSub<Target = COUNT>,
-    R: Ref<T>,
-    COUNT: Countable,
-{
-    fn sum_size(&self) -> COUNT {
-        let mut sum = COUNT::ZERO;
-        for i in self.mask().spans().map(|(a, b)| b.ordered_sub(&a)) {
-            sum = sum + i;
-        }
-        if self.mask().is_max_value_included() {
-            sum = sum + COUNT::ONE;
-        }
-        sum
-    }
-}
-
 impl<T: Ord + Clone + WithMin + WithMax> OrdMask<T> {
     /// Returns an iterator over the included spans.
     ///
     /// Each span is a tuple `(start, end)` representing a half-open interval `[start, end)`.
     ///
-    /// See also [`.into_spans()`](OrdMask::into_spans), [`.spans_count()`](OrdMask::spans_count).
+    /// See also [`.into_spans()`](OrdMask::into_spans)
+    ///
+    /// > Use [`.spans_count()`](OrdMask::spans_count)
+    /// > instead of [`.spans().count()`](std::iter::Iterator::count)
+    /// > to be more efficient when you only need the number of spans.
     ///
     /// **Note**: Since spans are half-open intervals `[start, end)`, whether `MAX` is included
     /// can be confusing. Use [`.is_max_value_included()`](OrdMask::is_max_value_included)
@@ -217,7 +145,11 @@ impl<T: Ord + Clone + WithMin + WithMax> OrdMask<T> {
     ///
     /// Each span is a tuple `(start, end)` representing a half-open interval `[start, end)`.
     ///
-    /// See also [`.spans()`](OrdMask::spans), [`.spans_count()`](OrdMask::spans_count).
+    /// See also [`.spans()`](OrdMask::spans).
+    ///
+    /// > Use [`.spans_count()`](OrdMask::spans_count)
+    /// > instead of [`.spans().count()`](std::iter::Iterator::count)
+    /// > to be more efficient when you only need the number of spans.
     ///
     /// **Note**: Since spans are half-open intervals `[start, end)`, whether `MAX` is included
     /// can be confusing. Use [`.is_max_value_included()`](OrdMask::is_max_value_included)

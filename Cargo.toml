@@ -1,6 +1,6 @@
 [package]
 name = "ordmask"
-version = "2.1.0"
+version = "2.2.0"
 edition = "2024"
 authors = ["Wzh <wzh@uvwee.com>"]
 description = "A library for efficient range-based set operations and membership checking"

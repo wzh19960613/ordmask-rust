@@ -2,10 +2,14 @@ use std::collections::BTreeSet;
 
 mod construct;
 mod convert;
+mod error;
+mod macros;
 mod operations;
+mod ops;
 
-pub mod spans;
-pub use spans::SumSize;
+pub mod iter;
+
+pub use error::*;
 
 use super::WithMin;
 
@@ -123,6 +127,27 @@ impl<T: Ord + Clone + WithMin> OrdMask<T> {
     /// Equivalent to [`.included(...)`](OrdMask::included).
     pub fn contains(&self, value: &T) -> bool {
         self.included(value)
+    }
+
+    /// Returns the number of included spans.
+    ///
+    /// Unlike [`.spans().count()`](Iterator::count) from the standard library,
+    /// this method is **O(1)** and does not consume or iterate over the spans.
+    ///
+    /// See also [`.spans()`](OrdMask::spans).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ordmask::ordmask;
+    /// assert_eq!(ordmask![.., 10].spans_count(), 1);        // [MIN, 10)
+    /// assert_eq!(ordmask![.., 10, 20].spans_count(), 2);    // [MIN, 10), [20, MAX]
+    /// assert_eq!(ordmask![<u32>].spans_count(), 0);         // Empty
+    /// assert_eq!(ordmask![<u32>..].spans_count(), 1);       // [MIN, MAX]
+    /// ```
+    pub const fn spans_count(&self) -> usize {
+        let delta = if self.based_on_universal { 2 } else { 1 };
+        (delta + self.key_points.len()) / 2
     }
 
     /// Check if the maximum value is included.

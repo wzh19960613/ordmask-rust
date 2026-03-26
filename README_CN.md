@@ -196,13 +196,16 @@ assert_eq!(
 );
 ```
 
-### 区间数量和大小
+### 区间数量和值计数
 
 使用 `.spans_count()` 可在 **O(1)** 时间内获取区间数量，且不用消耗迭代器。
 其结果等同于 `.spans().count()`，但更加高效。
 
+使用 `.values_count()` 获取包含值的总数。
+它支持惰性比较，无需计算完整计数。
+
 ```rust
-use ordmask::{ordmask, spans::SumSize};
+use ordmask::ordmask;
 
 // 区间数量
 assert_eq!(ordmask![.., 10].spans_count(), 1);      // [MIN, 10)
@@ -210,16 +213,48 @@ assert_eq!(ordmask![.., 10, 20].spans_count(), 2);  // [MIN, 10), [20, MAX]
 assert_eq!(ordmask![<u32>].spans_count(), 0);
 assert_eq!(ordmask![<u32>..].spans_count(), 1);
 
-// 区间大小总和
+// 值计数（惰性比较）
 // [0, 10)
-assert_eq!(ordmask![<u32> .., 10].spans().sum_size(), 10);
+assert!(ordmask![<u32> .., 10].values_count() == 10);
 // [0, 10), [20, MAX]
-assert_eq!(ordmask![<u32> .., 10, 20].spans().sum_size(), u32::MAX - 10 + 1);
-// 空集大小为 0
-assert_eq!(ordmask![<u32>].spans().sum_size(), 0);
+assert!(ordmask![<u32> .., 10, 20].values_count() == u32::MAX - 10 + 1);
+// 空集计数为 0
+assert!(ordmask![<u32>].values_count() == 0);
 ```
 
-> **警告**：对全集调用 `.spans().sum_size()` 可能会因溢出而 panic（因为 `MAX - MIN + 1` 会溢出）。建议在调用前使用 `.is_universal()` 进行检查。
+> **警告**：对全集调用 `.values_count().get()` 可能会因溢出而 panic（因为 `MAX - MIN + 1` 会溢出）。建议在调用 `.get()` 前使用 `.is_universal()` 进行检查。不过，惰性比较（如 `values_count() < value`）是安全的，因为它们可以提前终止而无需计算完整计数。
+
+# 值迭代 (Value Iteration)
+
+使用 `.values()` 和 `.into_values()` 迭代单个包含的值（而非区间）。
+
+> **注意**：值迭代需要类型 `T` 实现 `std::ops::Add<Output = T>` 和 `WithOne`（除了 `WithMin` 和 `WithMax`）。库已为所有标准整数类型提供实现。
+
+```rust
+use ordmask::ordmask;
+
+// [1, 4) 包含值 1, 2, 3
+assert_eq!(ordmask![1, 4].values().collect::<Vec<_>>(), vec![1, 2, 3]);
+
+// 多个区间：[1, 3) 和 [5, 7)
+assert_eq!(
+    ordmask![1, 3, 5, 7].values().collect::<Vec<_>>(),
+    vec![1, 2, 5, 6]
+);
+
+// 使用 into_values() 会消费 mask
+assert_eq!(ordmask![1, 4].into_values().collect::<Vec<_>>(), vec![1, 2, 3]);
+
+// 支持 for 循环
+let mask = ordmask![1, 4];
+let mut sum = 0;
+for v in mask.values() {
+    sum += v;
+}
+assert_eq!(sum, 6);
+```
+
+> **警告**：对于大型 mask（如全集），值迭代可能会产生大量值。请谨慎使用。
 
 ## 类型要求
 
@@ -236,38 +271,70 @@ assert_eq!(i32::MIN, <i32 as WithMin>::MIN);
 assert_eq!(u64::MIN, <u64 as WithMin>::MIN);
 ```
 
-如需使用自定义类型，则：
-- 至少实现 `WithMin` 以使用 `OrdMask`
-- 如需使用 `.spans()`、`.into_spans()`，则还要实现 `WithMax`
-- 如需使用 `.spans().sum_size()`，则还要实现 `OrderedSub`
-
-> **注意**：`spans_count()` 比较特殊，只需要 `WithMin` 即可使用，不需要 `WithMax`。
+如需使用自定义类型，至少实现 `WithMin` 以使用 `OrdMask`。然后：
+- `.spans_count()` 已实现
+- 如需使用 `.spans()` 或 `.into_spans()`，还需实现 `WithMax`
+- 如需使用 `.values()` 或 `.into_values()`，还需实现：
+    - `WithMax`
+    - `WithOne`
+    - `std::ops::Add`
+- 如需使用 `.values_count()`，还需实现：
+    - `WithMax`
+    - `OrderedSub<Target = COUNT>`，且 `COUNT` 应实现：
+        - `WithZero`
+        - `WithOne`
+        - `std::ops::Add`
+        - \[可选\] `PartialOrd` 以使用 `COUNT` 的比较运算符
 
 ```rust
-use ordmask::{OrderedSub, WithMax, WithMin, ordmask, spans::SumSize};
+use ordmask::prelude::*;
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Ord, Debug, PartialOrd, Eq, PartialEq)]
 struct MyType(i32);
 
-// 必要实现，可使用 `.spans_count()`
+// 必要实现。启用 `.spans_count()`。
 impl WithMin for MyType {
     const MIN: Self = MyType(i32::MIN);
 }
 
-// 可使用 `.spans()`, `.into_spans()`
+assert!(ordmask![..].included(&MyType(1)));
+
+// 启用 `.spans()` 和 `.into_spans()`。
 impl WithMax for MyType {
     const MAX: Self = MyType(i32::MAX);
 }
 
-// 可使用 `.spans().sum_size()`
+assert_eq!(
+    ordmask![MyType(0), MyType(10)].spans().collect::<Vec<_>>(),
+    vec![(MyType(0), MyType(10))]
+);
+
+// 启用 `.values_count()` 和 `COUNT` 的比较运算符。
 impl OrderedSub for MyType {
-    type Target = u32;
+    type Target = u32; // WithZero, WithOne, std::ops::Add, PartialOrd
 
     fn ordered_sub(&self, other: &Self) -> Self::Target {
-        self.0.ordered_sub(&other.0) // Same as the library does for i32
+        self.0.ordered_sub(&other.0) // 与库对 i32 的实现相同
     }
 }
 
-assert!(ordmask![..].included(&MyType(1)));
-assert_eq!(ordmask![MyType(0), MyType(10)].spans().sum_size(), 10);
+assert!(ordmask![MyType(0), MyType(10)].values_count() == 10);
+
+// 启用 `.values()` 和 `.into_values()`。
+impl WithOne for MyType {
+    const ONE: Self = MyType(1);
+}
+
+impl std::ops::Add for MyType {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+}
+
+assert_eq!(
+    ordmask![MyType(0), MyType(3)].values().collect::<Vec<_>>(),
+    vec![MyType(0), MyType(1), MyType(2)]
+);
 ```

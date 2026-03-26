@@ -4,7 +4,7 @@
 /// which should be `Self::MAX - Self::MIN`. Typically use the unsigned type as the target.
 ///
 /// This trait must be implemented for `T` in [`OrdMask<T>`](crate::OrdMask)
-/// if [`.spans().sum_size()`](crate::spans::SumSize::sum_size) is used.
+/// if [`.values_count()`](crate::OrdMask::values_count) is used.
 ///
 /// The library provides implementations for all standard integer types:
 /// `u8`, `u16`, `u32`, `u64`, `u128`, `usize`, `i8`, `i16`, `i32`, `i64`, `i128`, `isize`.
@@ -14,7 +14,7 @@
 /// # Example
 ///
 /// ```
-/// use ordmask::{OrderedSub, WithMax, WithMin, ordmask, spans::SumSize};
+/// use ordmask::{OrderedSub, WithMax, WithMin, ordmask};
 ///
 /// // 2147483647 - (-2147483648) = 4294967295
 /// assert_eq!(i32::MAX.ordered_sub(&i32::MIN), u32::MAX);
@@ -38,7 +38,7 @@
 ///     }
 /// }
 ///
-/// assert_eq!(ordmask![MyType(0), MyType(10)].spans().sum_size(), 10);
+/// assert!(ordmask![MyType(0), MyType(10)].values_count() == 10);
 /// ```
 pub trait OrderedSub: Ord {
     /// The type that should be returned from [OrderedSub::ordered_sub]

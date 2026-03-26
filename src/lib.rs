@@ -159,8 +159,10 @@
 //! > **Note**:
 //! > - Using spans requires type `T` to implement the [`WithMax`] trait
 //! >   (the library provides implementations for all standard integer types).
-//! > - Since spans are half-open intervals `[start, end)`, whether `MAX` is included can be confusing.
-//! >   Use [`.is_max_value_included()`](OrdMask::is_max_value_included) to check if the maximum value is in the mask.
+//! > - Since spans are half-open intervals `[start, end)`,
+//! >   whether `MAX` is included can be confusing.
+//! >   Use [`.is_max_value_included()`](OrdMask::is_max_value_included) to check
+//! >   if the maximum value is in the mask.
 //!
 //! ## Basic Iteration
 //!
@@ -201,13 +203,17 @@
 //! );
 //! ```
 //!
-//! ## Span Count and Size
+//! ## Span Count and Values Count
 //!
-//! Use [`.spans_count()`](OrdMask::spans_count) to get the number of spans in **O(1)** time without consuming an iterator.
+//! Use [`.spans_count()`](OrdMask::spans_count) to get the number of spans in **O(1)** time
+//! without consuming an iterator.
 //! It's equivalent to [`.spans().count()`](Iterator::count) but more efficient.
 //!
+//! Use [`.values_count()`](OrdMask::values_count) to get the total count of included values.
+//! It supports lazy comparison without computing the full count.
+//!
 //! ```
-//! use ordmask::{ordmask, spans::SumSize};
+//! use ordmask::ordmask;
 //!
 //! // Span count
 //! assert_eq!(ordmask![.., 10].spans_count(), 1);      // [MIN, 10)
@@ -215,18 +221,56 @@
 //! assert_eq!(ordmask![<u32>].spans_count(), 0);
 //! assert_eq!(ordmask![<u32>..].spans_count(), 1);
 //!
-//! // Sum of span sizes
+//! // Values count (lazy comparison)
 //! // [0, 10)
-//! assert_eq!(ordmask![<u32> .., 10].spans().sum_size(), 10);
+//! assert!(ordmask![<u32> .., 10].values_count() == 10);
 //! // [0, 10), [20, MAX]
-//! assert_eq!(ordmask![<u32> .., 10, 20].spans().sum_size(), u32::MAX - 10 + 1);
-//! // Empty mask has size 0
-//! assert_eq!(ordmask![<u32>].spans().sum_size(), 0);
+//! assert!(ordmask![<u32> .., 10, 20].values_count() == u32::MAX - 10 + 1);
+//! // Empty mask has count 0
+//! assert!(ordmask![<u32>].values_count() == 0);
 //! ```
 //!
-//! > **Warning**: [`.spans().sum_size()`](SumSize::sum_size) may panic due to overflow when called on a universal mask
-//! > (because `MAX - MIN + 1` overflows).
-//! > Use [`.is_universal()`](OrdMask::is_universal) to check before calling this.
+//! > **Warning**: Calling [`.values_count().get()`](iter::ValuesCount::get) may panic due to overflow
+//! > when called on a universal mask (because `MAX - MIN + 1` overflows).
+//! > Use [`.is_universal()`](OrdMask::is_universal) to check before calling `.get()`.
+//! > However, lazy comparisons (e.g., `values_count() < value`) are safe because they can
+//! > stop early without computing the full count.
+//!
+//! # Value Iteration
+//!
+//! Use [`.values()`](OrdMask::values) and [`.into_values()`](OrdMask::into_values) to iterate over
+//! individual included values (rather than spans).
+//!
+//! > **Note**: Value iteration requires type `T` to implement `std::ops::Add<Output = T>`
+//! > and [`WithOne`] (in addition to [`WithMin`] and [`WithMax`]).
+//! > The library provides implementations for all standard integer types.
+//!
+//! ```
+//! use ordmask::ordmask;
+//!
+//! // [1, 4) contains values 1, 2, 3
+//! assert_eq!(ordmask![1, 4].values().collect::<Vec<_>>(), vec![1, 2, 3]);
+//!
+//! // Multiple spans: [1, 3) and [5, 7)
+//! assert_eq!(
+//!     ordmask![1, 3, 5, 7].values().collect::<Vec<_>>(),
+//!     vec![1, 2, 5, 6]
+//! );
+//!
+//! // Using into_iter() consumes the mask
+//! assert_eq!(ordmask![1, 4].into_values().collect::<Vec<_>>(), vec![1, 2, 3]);
+//!
+//! // For loop support
+//! let mask = ordmask![1, 4];
+//! let mut sum = 0;
+//! for v in mask.values() {
+//!     sum += v;
+//! }
+//! assert_eq!(sum, 6);
+//! ```
+//!
+//! > **Warning**: For large masks (e.g., universal mask), value iteration can produce
+//! > a huge number of values. Use with caution.
 //!
 //! # Type Requirements
 //!
@@ -245,52 +289,81 @@
 //! assert_eq!(u64::MIN, <u64 as WithMin>::MIN);
 //! ```
 //!
-//! To use custom types:
-//! - At minimum, implement [`WithMin`] to use [`OrdMask`]
+//! To use custom types, at minimum, implement [`WithMin`] to use [`OrdMask`]. And then:
+//! - [`.spans_count()`](OrdMask::spans_count) is already implemented
 //! - To use [`.spans()`](OrdMask::spans) or [`.into_spans()`](OrdMask::into_spans),
 //!   also implement [`WithMax`]
-//! - To use [`.spans().sum_size()`](SumSize::sum_size), also implement [`OrderedSub`]
-//!
-//! > **Note**: [`.spans_count()`](OrdMask::spans_count) is special—it only requires [`WithMin`], not [`WithMax`].
+//! - To use [`.values()`](OrdMask::values) or [`.into_values()`](OrdMask::into_values),
+//!   also implement:
+//!     - [`WithMax`]
+//!     - [`WithOne`]
+//!     - [`std::ops::Add`]
+//! - To use [`.values_count()`](OrdMask::values_count), also implement:
+//!     - [`WithMax`]
+//!     - [`OrderedSub<Target = COUNT>`], and `COUNT` should implement:
+//!         - [`WithZero`]
+//!         - [`WithOne`]
+//!         - [`std::ops::Add`]
+//!         - \[Optionally\] [`PartialOrd`] to use comparison operators with `COUNT`
 //!
 //! ```
-//! use ordmask::{OrderedSub, WithMax, WithMin, ordmask, spans::SumSize};
+//! use ordmask::prelude::*;
 //!
-//! #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+//! #[derive(Clone, Ord, Debug, PartialOrd, Eq, PartialEq)]
 //! struct MyType(i32);
 //!
-//! // Required implementation, Enables `.spans_count()`
+//! // Required implementation. Enables `.spans_count()`.
 //! impl WithMin for MyType {
 //!     const MIN: Self = MyType(i32::MIN);
 //! }
 //!
-//! // Enables `.spans()`, `.into_spans()`
+//! assert!(ordmask![..].included(&MyType(1)));
+//!
+//! // Enables `.spans()` and `.into_spans()`.
 //! impl WithMax for MyType {
 //!     const MAX: Self = MyType(i32::MAX);
 //! }
 //!
-//! // Enables `.spans().sum_size()`
+//! assert_eq!(
+//!     ordmask![MyType(0), MyType(10)].spans().collect::<Vec<_>>(),
+//!     vec![(MyType(0), MyType(10))]
+//! );
+//!
+//! // Enables `.values_count()` and comparison operators with `COUNT`.
 //! impl OrderedSub for MyType {
-//!     type Target = u32;
+//!     type Target = u32; // WithZero, WithOne, std::ops::Add, PartialOrd
 //!
 //!     fn ordered_sub(&self, other: &Self) -> Self::Target {
 //!         self.0.ordered_sub(&other.0) // Same as the library does for i32
 //!     }
 //! }
 //!
-//! assert!(ordmask![..].included(&MyType(1)));
-//! assert_eq!(ordmask![MyType(0), MyType(10)].spans().sum_size(), 10);
+//! assert!(ordmask![MyType(0), MyType(10)].values_count() == 10);
+//!
+//! // Enables `.values()` and `.into_values()`.
+//! impl WithOne for MyType {
+//!     const ONE: Self = MyType(1);
+//! }
+//!
+//! impl std::ops::Add for MyType {
+//!     type Output = Self;
+//!
+//!     fn add(self, other: Self) -> Self {
+//!         Self(self.0 + other.0)
+//!     }
+//! }
+//!
+//! assert_eq!(
+//!     ordmask![MyType(0), MyType(3)].values().collect::<Vec<_>>(),
+//!     vec![MyType(0), MyType(1), MyType(2)]
+//! );
 //! ```
 
-mod macros;
-mod ops;
-
-mod error;
 mod ordmask;
 mod traits;
 
-pub use error::*;
 pub use ordmask::*;
 pub use traits::*;
 
+pub mod prelude;
 pub mod utils;

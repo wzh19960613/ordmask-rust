@@ -1,4 +1,4 @@
-use ordmask::{OrdMask, OrderedSub, WithMax, WithMin, ordmask, spans::SumSize};
+use ordmask::{OrdMask, OrderedSub, WithMax, WithMin, ordmask};
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 struct MyStruct(i32);
@@ -23,7 +23,7 @@ impl OrderedSub for MyStruct {
 fn test_custom_type_empty_mask() {
     let mask: OrdMask<MyStruct> = ordmask![];
     assert_eq!(mask.spans_count(), 0);
-    assert_eq!(mask.spans().sum_size(), 0u32);
+    assert!(mask.values_count() == 0u32);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn test_custom_type_single_span() {
     // [MyStruct(0), MyStruct(10)) - size should be 10
     let mask = ordmask![<MyStruct> MyStruct(0), MyStruct(10)];
     assert_eq!(mask.spans_count(), 1);
-    assert_eq!(mask.spans().sum_size(), 10u32);
+    assert!(mask.values_count() == 10u32);
 }
 
 #[test]
@@ -40,16 +40,16 @@ fn test_custom_type_from_universal() {
     let mask = ordmask![<MyStruct> .., MyStruct(5)];
     assert_eq!(mask.spans_count(), 1);
     // 5 - i32::MIN = 5 - (-2147483648) = 2147483653
-    assert_eq!(mask.spans().sum_size(), 2147483653u32);
+    assert!(mask.values_count() == 2147483653u32);
 }
 
 #[test]
 fn test_custom_type_from_empty_to_max() {
     let mask = ordmask![<MyStruct> MyStruct(0)];
     assert_eq!(mask.spans_count(), 1);
-    // sum_size = (MAX - 0) + 1 = i32::MAX + 1 = 2147483648
+    // values_count = (MAX - 0) + 1 = i32::MAX + 1 = 2147483648
     // because MAX value is included in the mask
-    assert_eq!(mask.spans().sum_size(), 2147483648u32);
+    assert!(mask.values_count() == 2147483648u32);
     assert!(mask.is_max_value_included());
 }
 
@@ -61,8 +61,8 @@ fn test_custom_type_multiple_spans() {
 
     // First span: 5 - MIN = 2147483653
     // Second span: MAX - 10 = 2147483637, plus 1 for MAX being included
-    let sum = mask.spans().sum_size();
-    assert_eq!(sum, 2147483653u32 + 2147483638u32);
+    let expected = 2147483653u32 + 2147483638u32;
+    assert!(mask.values_count() == expected);
 }
 
 #[test]
@@ -83,8 +83,8 @@ fn test_custom_type_universal() {
 
 #[test]
 #[should_panic]
-fn test_custom_type_sum_size_overflow() {
+fn test_custom_type_values_count_overflow() {
     let mask = ordmask![<MyStruct> ..];
-    // sum_size = (MAX - MIN) + 1 = u32::MAX + 1 = 4294967296 > u32::MAX
-    mask.spans().sum_size();
+    // values_count().get() = (MAX - MIN) + 1 = u32::MAX + 1 = 4294967296 > u32::MAX
+    mask.values_count().get();
 }
